@@ -1,3 +1,3 @@
 # firstrepo
 This is my first repository
-Author - Mohammed Ayan
+Author - Mohammed Ayan its me
