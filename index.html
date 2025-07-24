@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NGO Visit Response Management</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" class="app-container">
+        <!-- Mobile Menu Toggle -->
+        <button class="mobile-menu-toggle" id="mobileMenuToggle">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
+
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>NGO Visit Manager</h2>
+            </div>
+            <ul class="sidebar-nav">
+                <li><a href="#dashboard" class="nav-link active" data-section="dashboard">Dashboard</a></li>
+                <li><a href="#submit" class="nav-link" data-section="submit">Submit Response</a></li>
+                <li><a href="#responses" class="nav-link" data-section="responses">View Responses</a></li>
+                <li><a href="#admin" class="nav-link" data-section="admin">Admin Panel</a></li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard-section" class="section active">
+                <header class="section-header">
+                    <h1>Dashboard</h1>
+                    <p>Overview of current NGO visit and member responses</p>
+                </header>
+
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <div class="card__header">
+                            <h3>Current Event</h3>
+                        </div>
+                        <div class="card__body">
+                            <div class="event-info">
+                                <div class="event-detail">
+                                    <strong>Date:</strong> <span id="eventDate">Not set</span>
+                                </div>
+                                <div class="event-detail">
+                                    <strong>Place:</strong> <span id="eventPlace">Not set</span>
+                                </div>
+                                <div class="event-detail">
+                                    <strong>Description:</strong> <span id="eventDescription">No description</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <h4>Executive Members</h4>
+                                <span class="status status--success" id="execStatus">0/5</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="execProgress"></div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <h4>Senior Members</h4>
+                                <span class="status status--info" id="seniorStatus">0/10</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="seniorProgress"></div>
+                            </div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-header">
+                                <h4>Junior Members</h4>
+                                <span class="status status--warning" id="juniorStatus">0/15</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="juniorProgress"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Submit Response Section -->
+            <section id="submit-section" class="section">
+                <header class="section-header">
+                    <h1>Submit Response</h1>
+                    <p>Register for the upcoming NGO visit</p>
+                </header>
+
+                <div class="form-container">
+                    <div class="card">
+                        <div class="card__body">
+                            <form id="responseForm">
+                                <div class="form-group">
+                                    <label for="memberName" class="form-label">Full Name *</label>
+                                    <input type="text" id="memberName" class="form-control" required>
+                                    <div class="error-message" id="nameError"></div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="regNumber" class="form-label">Registration Number *</label>
+                                    <input type="text" id="regNumber" class="form-control" required>
+                                    <div class="error-message" id="regError"></div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="phoneNumber" class="form-label">Phone Number *</label>
+                                    <input type="tel" id="phoneNumber" class="form-control" required>
+                                    <div class="error-message" id="phoneError"></div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="memberType" class="form-label">Core Member Type *</label>
+                                    <select id="memberType" class="form-control" required>
+                                        <option value="">Select member type</option>
+                                        <option value="Executive">Executive</option>
+                                        <option value="Senior">Senior</option>
+                                        <option value="Junior">Junior</option>
+                                    </select>
+                                    <div class="error-message" id="typeError"></div>
+                                </div>
+
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn--primary">Submit Response</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="submitMessage" class="message hidden"></div>
+            </section>
+
+            <!-- View Responses Section -->
+            <section id="responses-section" class="section">
+                <header class="section-header">
+                    <h1>View Responses</h1>
+                    <p>All registered members for the current event</p>
+                </header>
+
+                <div class="responses-actions">
+                    <input type="text" id="searchResponses" class="form-control" placeholder="Search by name or registration number...">
+                    <button class="btn btn--secondary" id="exportBtn">Export CSV</button>
+                </div>
+
+                <div class="card">
+                    <div class="responses-table-container">
+                        <table class="responses-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Registration Number</th>
+                                    <th>Phone</th>
+                                    <th>Member Type</th>
+                                    <th>Registered On</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="responsesTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="empty-state hidden" id="emptyState">
+                        <p>No responses yet. Be the first to register!</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Admin Panel Section -->
+            <section id="admin-section" class="section">
+                <header class="section-header">
+                    <h1>Admin Panel</h1>
+                    <p>Board members only - Configure event settings</p>
+                </header>
+
+                <!-- Admin Login -->
+                <div id="adminLogin" class="card">
+                    <div class="card__header">
+                        <h3>Admin Authentication</h3>
+                    </div>
+                    <div class="card__body">
+                        <div class="form-group">
+                            <label for="adminPassword" class="form-label">Admin Password</label>
+                            <input type="password" id="adminPassword" class="form-control" placeholder="Enter admin password">
+                            <div class="error-message" id="adminError"></div>
+                        </div>
+                        <button class="btn btn--primary" id="adminLoginBtn">Login</button>
+                    </div>
+                </div>
+
+                <!-- Admin Panel Content -->
+                <div id="adminPanel" class="hidden">
+                    <div class="admin-grid">
+                        <div class="card">
+                            <div class="card__header">
+                                <h3>Event Configuration</h3>
+                            </div>
+                            <div class="card__body">
+                                <form id="eventConfigForm">
+                                    <div class="form-group">
+                                        <label for="eventDateInput" class="form-label">Event Date *</label>
+                                        <input type="date" id="eventDateInput" class="form-control" required>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="visitingPlace" class="form-label">Visiting Place *</label>
+                                        <input type="text" id="visitingPlace" class="form-control" required>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="eventDescriptionInput" class="form-label">Event Description</label>
+                                        <textarea id="eventDescriptionInput" class="form-control" rows="3" placeholder="Optional description..."></textarea>
+                                    </div>
+
+                                    <div class="limits-grid">
+                                        <div class="form-group">
+                                            <label for="maxExecutive" class="form-label">Max Executive Members</label>
+                                            <input type="number" id="maxExecutive" class="form-control" min="1" value="5">
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="maxSenior" class="form-label">Max Senior Members</label>
+                                            <input type="number" id="maxSenior" class="form-control" min="1" value="10">
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="maxJunior" class="form-label">Max Junior Members</label>
+                                            <input type="number" id="maxJunior" class="form-control" min="1" value="15">
+                                        </div>
+                                    </div>
+
+                                    <button type="submit" class="btn btn--primary">Save Configuration</button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card__header">
+                                <h3>Data Management</h3>
+                            </div>
+                            <div class="card__body">
+                                <p>Manage response data and system settings.</p>
+                                <div class="admin-actions">
+                                    <button class="btn btn--secondary" id="exportAllBtn">Export All Data</button>
+                                    <button class="btn btn--outline btn--danger" id="clearAllBtn">Clear All Responses</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn--secondary" id="logoutBtn">Logout</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="confirmTitle">Confirm Action</h3>
+            <p id="confirmMessage">Are you sure you want to proceed?</p>
+            <div class="modal-actions">
+                <button class="btn btn--secondary" id="cancelBtn">Cancel</button>
+                <button class="btn btn--primary" id="confirmBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
