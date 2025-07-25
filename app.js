@@ -1,4 +1,5 @@
-// NGO Visit Management Application
+// NGO Visit Management Application - API-connected
+
 class NGOVisitManager {
     constructor() {
         this.currentSection = 'dashboard';
@@ -6,16 +7,44 @@ class NGOVisitManager {
         this.init();
     }
 
-    init() {
-        this.initializeData();
+    async init() {
+        await this.initializeData();
         this.bindEvents();
-        this.updateDashboard();
-        this.updateResponsesTable();
+        await this.updateDashboard();
+        await this.updateResponsesTable();
         this.loadAdminConfig();
     }
 
-    initializeData() {
-        // Initialize with sample data if no data exists
+    // --- API Helpers ---
+    apiUrl(path) {
+        return `http://localhost:5000${path}`;
+    }
+
+    async getResponsesAPI() {
+        const res = await fetch(this.apiUrl('/api/responses'));
+        return await res.json();
+    }
+
+    async saveResponseAPI(response) {
+        const res = await fetch(this.apiUrl('/api/responses'), {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(response)
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || 'Failed to save response');
+        }
+        return await res.json();
+    }
+
+    async clearAllResponsesAPI() {
+        await fetch(this.apiUrl('/api/responses'), { method: 'DELETE' });
+    }
+
+    // --- Data Initialization (event config stays local for now) ---
+    async initializeData() {
+        // Only event config uses localStorage, responses fetched from API
         if (!localStorage.getItem('ngoEventConfig')) {
             const sampleConfig = {
                 date: "2025-08-15",
@@ -27,16 +56,9 @@ class NGOVisitManager {
             };
             localStorage.setItem('ngoEventConfig', JSON.stringify(sampleConfig));
         }
-
-        if (!localStorage.getItem('ngoResponses')) {
-            const sampleResponses = [
-            ];
-            localStorage.setItem('ngoResponses', JSON.stringify(sampleResponses));
-        }
     }
 
     bindEvents() {
-        // Navigation
         document.querySelectorAll('.nav-link').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -53,9 +75,9 @@ class NGOVisitManager {
         });
 
         // Response form submission
-        document.getElementById('responseForm').addEventListener('submit', (e) => {
+        document.getElementById('responseForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            this.handleResponseSubmission();
+            await this.handleResponseSubmission();
         });
 
         // Admin login
@@ -84,17 +106,17 @@ class NGOVisitManager {
         });
 
         // Export buttons
-        document.getElementById('exportBtn').addEventListener('click', () => {
-            this.exportCSV();
+        document.getElementById('exportBtn').addEventListener('click', async () => {
+            await this.exportCSV();
         });
 
-        document.getElementById('exportAllBtn').addEventListener('click', () => {
-            this.exportCSV();
+        document.getElementById('exportAllBtn').addEventListener('click', async () => {
+            await this.exportCSV();
         });
 
         // Search functionality
-        document.getElementById('searchResponses').addEventListener('input', (e) => {
-            this.filterResponses(e.target.value);
+        document.getElementById('searchResponses').addEventListener('input', async (e) => {
+            await this.filterResponses(e.target.value);
         });
 
         // Modal events
@@ -104,24 +126,16 @@ class NGOVisitManager {
     }
 
     showSection(section) {
-        // Update navigation
         document.querySelectorAll('.nav-link').forEach(link => {
             link.classList.remove('active');
         });
         document.querySelector(`[data-section="${section}"]`).classList.add('active');
-
-        // Update sections
         document.querySelectorAll('.section').forEach(sec => {
             sec.classList.remove('active');
         });
         document.getElementById(`${section}-section`).classList.add('active');
-
         this.currentSection = section;
-
-        // Close mobile menu
         document.getElementById('sidebar').classList.remove('active');
-
-        // Refresh data when switching sections
         if (section === 'dashboard') {
             this.updateDashboard();
         } else if (section === 'responses') {
@@ -129,72 +143,52 @@ class NGOVisitManager {
         }
     }
 
-    handleResponseSubmission() {
+    async handleResponseSubmission() {
         const form = document.getElementById('responseForm');
-        const formData = new FormData(form);
-        
         const response = {
             name: document.getElementById('memberName').value.trim(),
             regNumber: document.getElementById('regNumber').value.trim(),
             phone: document.getElementById('phoneNumber').value.trim(),
             memberType: document.getElementById('memberType').value
         };
-
-        // Clear previous errors
         this.clearFormErrors();
-
-        // Validate form
         if (!this.validateResponse(response)) {
             return;
         }
+        try {
+            // Member type limits
+            const config = this.getEventConfig();
+            const memberCounts = await this.getMemberCounts();
+            const maxLimit = { 'Executive': config.maxExecutive, 'Senior': config.maxSenior, 'Junior': config.maxJunior }[response.memberType];
+            if (memberCounts[response.memberType] >= maxLimit) {
+                this.showFieldError('typeError', `${response.memberType} member limit (${maxLimit}) has been reached.`);
+                return;
+            }
 
-        // Check if registration number already exists
-        const existingResponses = this.getResponses();
-        if (existingResponses.some(r => r.regNumber === response.regNumber)) {
-            this.showFieldError('regError', 'This registration number is already registered.');
-            return;
+            await this.saveResponseAPI(response);
+            this.showMessage('Response submitted successfully!', 'success');
+            form.reset();
+            await this.updateDashboard();
+            await this.updateResponsesTable();
+        } catch (err) {
+            if (err.message && err.message.includes('already exists')) {
+                this.showFieldError('regError', 'This registration number is already registered.');
+            } else {
+                this.showMessage(err.message || 'Error: could not submit.', 'error');
+            }
         }
-
-        // Check member type limits
-        const config = this.getEventConfig();
-        const memberCounts = this.getMemberCounts();
-        const maxLimit = {
-            'Executive': config.maxExecutive,
-            'Senior': config.maxSenior,
-            'Junior': config.maxJunior
-        }[response.memberType];
-
-        if (memberCounts[response.memberType] >= maxLimit) {
-            this.showFieldError('typeError', `${response.memberType} member limit (${maxLimit}) has been reached.`);
-            return;
-        }
-
-        // Add response
-        response.id = Date.now();
-        response.timestamp = new Date().toISOString();
-        
-        existingResponses.push(response);
-        localStorage.setItem('ngoResponses', JSON.stringify(existingResponses));
-
-        // Show success message and reset form
-        this.showMessage('Response submitted successfully!', 'success');
-        form.reset();
-        this.updateDashboard();
     }
 
     validateResponse(response) {
         let isValid = true;
-
         if (!response.name) {
             this.showFieldError('nameError', 'Name is required.');
             isValid = false;
         }
-
         if (!response.regNumber) {
             this.showFieldError('regError', 'Registration number is required.');
             isValid = false;
         }
-
         if (!response.phone) {
             this.showFieldError('phoneError', 'Phone number is required.');
             isValid = false;
@@ -202,12 +196,10 @@ class NGOVisitManager {
             this.showFieldError('phoneError', 'Please enter a valid phone number.');
             isValid = false;
         }
-
         if (!response.memberType) {
             this.showFieldError('typeError', 'Member type is required.');
             isValid = false;
         }
-
         return isValid;
     }
 
@@ -230,7 +222,6 @@ class NGOVisitManager {
         messageEl.textContent = text;
         messageEl.className = `message ${type}`;
         messageEl.classList.remove('hidden');
-        
         setTimeout(() => {
             messageEl.classList.add('hidden');
         }, 5000);
@@ -239,7 +230,6 @@ class NGOVisitManager {
     handleAdminLogin() {
         const password = document.getElementById('adminPassword').value;
         const errorEl = document.getElementById('adminError');
-        
         if (password === 'admin123') {
             this.isAdminLoggedIn = true;
             document.getElementById('adminLogin').classList.add('hidden');
@@ -266,7 +256,6 @@ class NGOVisitManager {
             maxSenior: parseInt(document.getElementById('maxSenior').value) || 10,
             maxJunior: parseInt(document.getElementById('maxJunior').value) || 15
         };
-
         localStorage.setItem('ngoEventConfig', JSON.stringify(config));
         this.updateDashboard();
         this.showMessage('Event configuration saved successfully!', 'success');
@@ -282,17 +271,18 @@ class NGOVisitManager {
         document.getElementById('maxJunior').value = config.maxJunior;
     }
 
-    updateDashboard() {
-        const config = this.getEventConfig();
-        const memberCounts = this.getMemberCounts();
+    getEventConfig() {
+        return JSON.parse(localStorage.getItem('ngoEventConfig') || '{}');
+    }
 
-        // Update event info
-        document.getElementById('eventDate').textContent = 
-            config.date ? new Date(config.date).toLocaleDateString() : 'Not set';
+    // --- Fetching and Display ---
+    async updateDashboard() {
+        const config = this.getEventConfig();
+        const memberCounts = await this.getMemberCounts();
+        document.getElementById('eventDate').textContent = config.date ? new Date(config.date).toLocaleDateString() : 'Not set';
         document.getElementById('eventPlace').textContent = config.place || 'Not set';
         document.getElementById('eventDescription').textContent = config.description || 'No description';
 
-        // Update statistics
         this.updateMemberStats('exec', memberCounts.Executive, config.maxExecutive);
         this.updateMemberStats('senior', memberCounts.Senior, config.maxSenior);
         this.updateMemberStats('junior', memberCounts.Junior, config.maxJunior);
@@ -300,11 +290,8 @@ class NGOVisitManager {
 
     updateMemberStats(type, current, max) {
         const percentage = max > 0 ? (current / max) * 100 : 0;
-        
         document.getElementById(`${type}Status`).textContent = `${current}/${max}`;
         document.getElementById(`${type}Progress`).style.width = `${percentage}%`;
-
-        // Update status color based on capacity
         const statusEl = document.getElementById(`${type}Status`);
         statusEl.className = 'status ';
         if (current >= max) {
@@ -316,162 +303,116 @@ class NGOVisitManager {
         }
     }
 
-    updateResponsesTable() {
-        const responses = this.getResponses();
+    async updateResponsesTable() {
+        const responses = await this.getResponses();
         const tbody = document.getElementById('responsesTableBody');
         const emptyState = document.getElementById('emptyState');
-
         if (responses.length === 0) {
             tbody.innerHTML = '';
             emptyState.classList.remove('hidden');
             return;
         }
-
         emptyState.classList.add('hidden');
-        tbody.innerHTML = responses.map(response => `
+        tbody.innerHTML = responses.map((response, idx) => `
             <tr>
-                <td>${this.escapeHtml(response.name)}</td>
-                <td>${this.escapeHtml(response.regNumber)}</td>
-                <td>${this.escapeHtml(response.phone)}</td>
-                <td><span class="status status--info">${response.memberType}</span></td>
-                <td>${new Date(response.timestamp).toLocaleDateString()}</td>
-                <td>
-                    <button class="delete-btn" onclick="app.deleteResponse(${response.id})">
-                        Delete
-                    </button>
-                </td>
+                <td>${response.name}</td>
+                <td>${response.regNumber}</td>
+                <td>${response.phone}</td>
+                <td>${response.memberType}</td>
+                <td>${response.timestamp ? new Date(response.timestamp).toLocaleString() : ''}</td>
+                <td><!-- Action buttons if needed --></td>
             </tr>
         `).join('');
     }
 
-    filterResponses(searchTerm) {
-        const responses = this.getResponses();
-        const filteredResponses = responses.filter(response => 
-            response.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            response.regNumber.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-
-        const tbody = document.getElementById('responsesTableBody');
-        tbody.innerHTML = filteredResponses.map(response => `
-            <tr>
-                <td>${this.escapeHtml(response.name)}</td>
-                <td>${this.escapeHtml(response.regNumber)}</td>
-                <td>${this.escapeHtml(response.phone)}</td>
-                <td><span class="status status--info">${response.memberType}</span></td>
-                <td>${new Date(response.timestamp).toLocaleDateString()}</td>
-                <td>
-                    <button class="delete-btn" onclick="app.deleteResponse(${response.id})">
-                        Delete
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+    async getResponses() {
+        return await this.getResponsesAPI();
     }
 
-    deleteResponse(id) {
-        this.confirmAction(
-            'Delete Response',
-            'Are you sure you want to delete this response?',
-            () => {
-                const responses = this.getResponses();
-                const filteredResponses = responses.filter(r => r.id !== id);
-                localStorage.setItem('ngoResponses', JSON.stringify(filteredResponses));
-                this.updateResponsesTable();
-                this.updateDashboard();
-            }
-        );
-    }
-
-    clearAllResponses() {
-        localStorage.setItem('ngoResponses', '[]');
-        this.updateResponsesTable();
-        this.updateDashboard();
-    }
-
-    exportCSV() {
-        const responses = this.getResponses();
-        const config = this.getEventConfig();
-        
-        if (responses.length === 0) {
-            alert('No responses to export.');
-            return;
-        }
-
-        const headers = ['Name', 'Registration Number', 'Phone', 'Member Type', 'Registered On'];
-        const csvContent = [
-            `NGO Visit Responses - ${config.place} (${config.date})`,
-            '',
-            headers.join(','),
-            ...responses.map(r => [
-                `"${r.name}"`,
-                `"${r.regNumber}"`,
-                `"${r.phone}"`,
-                `"${r.memberType}"`,
-                `"${new Date(r.timestamp).toLocaleDateString()}"`
-            ].join(','))
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `ngo-visit-responses-${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-    }
-
-    confirmAction(title, message, callback) {
-        document.getElementById('confirmTitle').textContent = title;
-        document.getElementById('confirmMessage').textContent = message;
-        document.getElementById('confirmModal').classList.remove('hidden');
-        
-        const confirmBtn = document.getElementById('confirmBtn');
-        const newConfirmBtn = confirmBtn.cloneNode(true);
-        confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-        
-        newConfirmBtn.addEventListener('click', () => {
-            callback();
-            this.hideModal();
-        });
-    }
-
-    hideModal() {
-        document.getElementById('confirmModal').classList.add('hidden');
-    }
-
-    getEventConfig() {
-        const config = localStorage.getItem('ngoEventConfig');
-        return config ? JSON.parse(config) : {
-            date: '',
-            place: '',
-            description: '',
-            maxExecutive: 5,
-            maxSenior: 10,
-            maxJunior: 15
+    async getMemberCounts() {
+        const responses = await this.getResponsesAPI();
+        return {
+            Executive: responses.filter(r => r.memberType === "Executive").length,
+            Senior: responses.filter(r => r.memberType === "Senior").length,
+            Junior: responses.filter(r => r.memberType === "Junior").length
         };
     }
 
-    getResponses() {
-        const responses = localStorage.getItem('ngoResponses');
-        return responses ? JSON.parse(responses) : [];
+    async filterResponses(query) {
+        const responses = await this.getResponses();
+        const term = query.toLowerCase();
+        const filtered = responses.filter(r =>
+            r.name.toLowerCase().includes(term) ||
+            r.regNumber.toLowerCase().includes(term) ||
+            r.phone.toLowerCase().includes(term) ||
+            r.memberType.toLowerCase().includes(term)
+        );
+        const tbody = document.getElementById('responsesTableBody');
+        tbody.innerHTML = filtered.map((response, idx) => `
+            <tr>
+                <td>${response.name}</td>
+                <td>${response.regNumber}</td>
+                <td>${response.phone}</td>
+                <td>${response.memberType}</td>
+                <td>${response.timestamp ? new Date(response.timestamp).toLocaleString() : ''}</td>
+            </tr>
+        `).join('');
     }
 
-    getMemberCounts() {
-        const responses = this.getResponses();
-        return responses.reduce((counts, response) => {
-            counts[response.memberType] = (counts[response.memberType] || 0) + 1;
-            return counts;
-        }, { Executive: 0, Senior: 0, Junior: 0 });
+    async clearAllResponses() {
+        await this.clearAllResponsesAPI();
+        await this.updateDashboard();
+        await this.updateResponsesTable();
+        this.showMessage('All responses cleared!', 'success');
     }
 
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    hideModal() {
+        document.getElementById('modal').classList.add('hidden');
+    }
+
+    confirmAction(title, message, onConfirm) {
+        const modal = document.getElementById('modal');
+        modal.querySelector('.modal-content h3').textContent = title;
+        modal.querySelector('.modal-content p').textContent = message;
+
+        // Remove previous listeners
+        const okBtn = modal.querySelector('#okBtn');
+        const newOkBtn = okBtn.cloneNode(true);
+        okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+
+        newOkBtn.addEventListener('click', async () => {
+            modal.classList.add('hidden');
+            await onConfirm();
+        });
+        modal.classList.remove('hidden');
+    }
+
+    async exportCSV() {
+        const responses = await this.getResponses();
+        if (!responses.length) {
+            this.showMessage('No data to export', 'error');
+            return;
+        }
+        const csvRows = [
+            ['Name', 'Registration Number', 'Phone', 'Member Type', 'Registered On'],
+            ...responses.map(r => [
+                `"${r.name}"`, `"${r.regNumber}"`, `"${r.phone}"`, `"${r.memberType}"`, `"${r.timestamp ? new Date(r.timestamp).toLocaleString() : ''}"`
+            ])
+        ];
+        const csvContent = csvRows.map(row => row.join(',')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'responses.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 }
 
-// Initialize the application
-const app = new NGOVisitManager();
+// Instantiate the manager when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.ngoManager = new NGOVisitManager();
+});
